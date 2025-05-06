@@ -139,3 +139,53 @@ instance_name = "dev_server"
 instance_ami = "ami-085386e29e44dacd7"
 ```
 `Terraform apply --auto-approve -var-file="dev.tfvars"` 
+
+## Terraform Workspace
+
+* A workspace is an isolated environment where a separate state file is maintained.
+
+* This feature allows you to manage different environments (like development, staging, production) within the same Terraform configuration.
+
+* Each workspace has its own state, enabling you to deploy the same infrastructure to multiple environments without needing to duplicate the configuration files.
+
+* All workspace statefiles are under directory terraform.tfstate.d
+
+`terraform workspace list` **to show list of workspace**
+
+`terraform workspace new ` **to Create and switch to workspace "dev"**
+
+`terraform workspace show` **to show current workspace**
+
+`terraform workspace select` **to switch between workspaces**
+
+`terraform workspace delete` **to delete the workspaces**
+
+Example to create multiple workspaces and multiple EC2 Instances and assigning those workspaces to respective instances based on the requirement
+
+```
+provider "aws" {
+  region = "us-east-1"
+}
+
+locals {
+  instance_types = {
+    dev  = "t2.micro"
+    test = "t2.small"
+    prod = "t2.medium"
+  }
+}
+
+resource "aws_instance" "myinstance" {
+  ami           = "ami-085386e29e44dacd7"
+  instance_type = local.instance_types[terraform.workspace]
+  tags = {
+    name = "$(terraform.workspace)-server"
+  }
+}
+
+output "active_workspace" {
+  value = terraform.workspace
+}
+```
+
+
