@@ -160,7 +160,7 @@ instance_ami = "ami-085386e29e44dacd7"
 
 `terraform workspace delete` **to delete the workspaces**
 
-Example to create multiple workspaces and multiple EC2 Instances and assigning those workspaces to respective instances based on the requirement
+Example to create multiple workspaces and multiple EC2 Instances and assigning those workspaces to respective instances based on the requirement with Local variable
 
 ```
 provider "aws" {
@@ -188,4 +188,62 @@ output "active_workspace" {
 }
 ```
 
+## Creating a VPC(with one subnet and one instance)
+
+```
+provider "aws" {
+  region = "us-east-1"
+}
+
+locals {
+  env = terraform.workspace
+}
+
+resource "aws_vpc" "MyVpc" {
+  cidr_block = "192.168.0.0/16"
+  tags = {
+    name = "$(local.env)-vpc"
+  }
+}
+
+resource "aws_subnet" "subnet" {
+  vpc_id            = aws_vpc.MyVpc.id
+  cidr_block        = "192.168.1.0/24"
+  availability_zone = "us-east-1a"
+  tags = {
+    name = "$(local.env)-subnet"
+  }
+}
+
+resource "aws_instance" "MyInstance" {
+  subnet_id     = aws_subnet.subnet.id
+  ami           = "ami-085386e29e44dacd7"
+  instance_type = "t2.micro"
+  tags = {
+    name = "$(local.env)-instance"
+  }
+}
+```
+## Dynamic Local Variable
+
+it is the concept of **If else** where code has a variable terraform.workspace which is taking the value dynamicly from which workspace we are using, in this case we are using default workspace, that default workspace will be passed to instace_type = default, if prod m4.large will launch, if not t2.small
+```
+provider "aws" {
+  region = "us-east-1"
+
+}
+
+resource "aws_instance" "myinstance" {
+  ami           = "ami-085386e29e44dacd7"
+  instance_type = terraform.workspace == "prod" ? "m4.large" : "t2.small"
+  tags = {
+    name = "dyanimic-local-variable-$(terraform.workspace)"
+  }
+}
+
+output "active_workspace" {
+  description = "current worspace"
+  value       = aws_instance.myinstance.instance_type
+}
+```
 
