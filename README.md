@@ -246,4 +246,60 @@ output "active_workspace" {
   value       = aws_instance.myinstance.instance_type
 }
 ```
+## Meta arguments
 
+In Terraform, meta-arguments are special arguments that you can use with resources, modules, and other blocks to control how they behave.
+
+### Depends_on
+
+The depends_on meta-argument explicitly defines dependencies between resources. This ensures that one resource is created or updated only after another resource has been successfully created or updated.
+
+```
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_instance" "myinstance" {
+  ami           = "ami-085386e29e44dacd7"
+  instance_type = "t2.micro"
+tags = {
+    Name = "Depends-on-EC2"
+  }
+}
+
+resource "aws_eip" "myinstance_eip" {
+  instance   = aws_instance.myinstance.id
+  depends_on = [aws_instance.myinstance]
+}
+
+output "elastic_ip" {
+  description = "Elastic IP of the instance"
+  value       = aws_eip.myinstance_eip.public_ip
+}
+```
+
+
+### Count
+
+The "count" meta-argument allows you to specify the number of instances of a resource or module to create.
+
+### for_each
+
+The "for_each" meta-argument allows you to create multiple instances of a resource or module based on the elements of a set. It provides more control and flexibility than "count"
+
+### Provider
+
+The provider meta-argument allows you to specify which provider configuration to use for a particular resource or module. This is useful when you have multiple configurations for the same provider, such as when managing resources in multiple regions.
+                  
+
+### Lifecycle
+
+The lifecycle meta-argument allows you to control the lifecycle of a resource. It provides options to prevent the destruction of resources, create resources before destroying existing ones, or ignore changes to specific attributes.
+
+                  -- create_before_destroy
+                  -- prevent_destroy
+                  -- ignore_changes
+
+### ignore_changes
+
+This meta-argument is used within the lifecycle block to instruct Terraform to ignore changes to specific attributes of a resource. This is particularly useful when an attribute is managed outside of Terraform, or if you want to prevent Terraform from trying to update a resource when certain attributes change.
