@@ -283,13 +283,127 @@ output "elastic_ip" {
 
 The "count" meta-argument allows you to specify the number of instances of a resource or module to create.
 
+In the below code, the instances names are assigned based on the number of instances count we give
+```
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_instance" "myinstance" {
+  count         = 2
+  ami           = "ami-085386e29e44dacd7"
+  instance_type = "t2.micro"
+  tags = {
+    name = "webserver-$-{count.index}"
+  }
+}
+
+output "instance_ids" {
+  value = aws_instance.myinstance[*].id
+}
+
+output "instance_names" {
+  value = aws_instance.myinstance[*].tags.name
+}
+```
+
+another better way to do it
+
+```
+provider "aws" {
+  region = "us-east-1"
+}
+
+variable "instance_type" {
+  default = ["t2.micro", "t2.small", "t2.medium"]
+}
+
+variable "instance_name" {
+  default = ["dev-server", "test-server", "prod-server"]
+}
+
+resource "aws_instance" "myinstance" {
+  ami           = "ami-085386e29e44dacd7"
+  count         = length(var.instance_type)
+  instance_type = var.instance_type[count.index]
+  tags = {
+    name = var.instance_name[count.index]
+  }
+}
+
+output "instance_id" {
+  value = aws_instance.myinstance[*].id
+}
+```
+
 ### for_each
 
 The "for_each" meta-argument allows you to create multiple instances of a resource or module based on the elements of a set. It provides more control and flexibility than "count"
 
-### Provider
+count vs for_each : count will create identical resources, for_each will create different resources
 
-The provider meta-argument allows you to specify which provider configuration to use for a particular resource or module. This is useful when you have multiple configurations for the same provider, such as when managing resources in multiple regions.
+```
+provider "aws" {
+  region = "us-east-1"
+}
+resource "aws_instance" "myinstance" {
+  ami           = "ami-085386e29e44dacd7"
+  for_each      = toset(["dev-server", "test-server", "prod-server"])
+  instance_type = "t2.micro"
+  tags = {
+    name = "$-{each.key}"
+  }
+}
+
+output "instance_id" {
+  value = { for k, v in aws_instance.myinstance : k => v.id }
+}
+```
+* toset() is a function to create multiple EC2 instances from a list of names
+
+* Terraform will generate a map of instances with keys in this case as "dev-server", "test-server", and "prod-server".
+
+*The "for" expression iterates over aws_instance.myinstance
+
+*k represents the instance key (dev-server, test-server, etc.)
+
+*v.id retrieves the instance ID
+
+*The result is a map of key => instance_id
+
+*In for_each , we can play with key and value like .key and .value
+
+
+another example 
+
+```
+provider "aws" {
+  region = "us-east-1"
+}
+variable "instances" {
+  type = map(string)
+  default = {
+    "dev-server"  = "t2.micro"
+    "test-server" = "t2.medium"
+    "prod-server" = "t2.large"
+  }
+}
+
+resource "aws_instance" "myinstance" {
+
+  for_each      = var.instances
+  ami           = "ami-085386e29e44dacd7"
+  instance_type = each.value
+  tags = {
+    name = "each.key"
+  }
+}
+
+output "instances_id" {
+  value = { for k, v in aws_instance.myinstance : k => v.id }
+}
+```
+
                   
 
 ### Lifecycle
@@ -300,6 +414,65 @@ The lifecycle meta-argument allows you to control the lifecycle of a resource. I
                   -- prevent_destroy
                   -- ignore_changes
 
-### ignore_changes
+**Ignore changes**
 
-This meta-argument is used within the lifecycle block to instruct Terraform to ignore changes to specific attributes of a resource. This is particularly useful when an attribute is managed outside of Terraform, or if you want to prevent Terraform from trying to update a resource when certain attributes change.
+If anyone modified the resources in AWS console which is created by TF, It will ignore that changes, it will not bring back to desired state. Actual State is AWS Console, Desired State is Statefile
+
+```
+resource "aws_instance" "myinstance" {
+  ami           = "ami-085386e29e44dacd7"
+  instance_type = "t2.micro"
+  tags = {
+    Name = "example-server"
+  }
+  lifecycle {
+    ignore_changes = all
+  }
+}
+
+output "instance_id" {
+  description = "EC2 instance ID"
+  value       = aws_instance.myinstance.id
+}
+```
+
+**Prevent-destroy**
+
+resources will not delete if you give destroy command
+```
+provider "aws" {
+region = "us-east-1"
+}
+
+resource "aws_instance" "one" {
+ami = "ami-085386e29e44dacd7"
+instance_type = "t2.micro"
+tags = {
+Name = "example-server"
+}
+lifecycle{
+prevent_destroy = true
+}
+}
+```
+
+**Create-before-destroy**
+
+If you change the instance type or instance name , security groups etc , It will change immediatelyand instance will not get deleted.  but if you want to change the image id of the EC2 instance , instance will delete first and then create a new instance with new ami-id
+```
+provider "aws" {
+region = "us-east-1"
+}
+
+resource "aws_instance" "one" {
+ami = "ami-085386e29e44dacd7"
+instance_type = "t2.micro"
+tags = {
+Name = "example-server"
+}
+lifecycle{
+create_before_destroy = true
+}
+}
+```
+
