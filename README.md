@@ -476,3 +476,37 @@ create_before_destroy = true
 }
 ```
 
+## Launching Docker containers
+
+launching a sample container with image
+
+```
+terraform {
+  required_providers {
+    docker = {
+      source = "kreuzwerker/docker"
+      version = "3.5.0"
+    }
+  }
+}
+
+provider "docker" {
+host = "unix:///var/run/docker.sock"   # for linux/macOS
+}
+
+resource "docker_image" "bank" {
+name = "sunil3012/mb-image:latest"    # Image name
+keep_locally = false
+}
+
+resource "docker_container" "bankcont" {
+name = "bank-conatainer"
+image = docker_image.bank.image_id
+ports {
+internal = 80
+external = 7543    # external port number
+}
+}
+```
+
+to run `terraform init` --> `terrafom plan` --> `terraform apply --auto-approve` and to destroy --> `terraform destroy --auto-approve`
