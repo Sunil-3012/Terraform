@@ -1,5 +1,21 @@
-# Terraform
+<div align="center">
+  <h1>Terraform</h1>
+</div>
 
+*topics*
+
+* Terraform basic commands and Intializing infrastructure
+* Launching EC2 Instance
+* Taint
+* Terraform Locals
+* Dynamic Local Variables
+* Terraform Workspaces
+* Creating VPC
+* META Arguments(Depend_on, Count, For_each, Lifecycle)
+* Launchin Docker Containers
+* Terraform Modules
+* Provisioner(local-exec, remote-exec, file)
+* Data-Source
 ### Initialize infrastructure 
 
 `terraform init` Initialize a working directory, it will download the providers plugins
@@ -140,6 +156,63 @@ instance_ami = "ami-085386e29e44dacd7"
 ```
 `Terraform apply --auto-approve -var-file="dev.tfvars"` 
 
+## Taint
+
+Terraform taint command is used to manually mark a specific resource for recreation. When you mark a resource as "tainted," it indicates to Terraform that the resource is in a bad or inconsistent state and should be destroyed and recreated during the next terraform apply operation.
+
+When to Use : Failed Deployments, Manual Changes and Resource Corruption
+
+```
+provider "aws" {
+  region = "ap-south-1"
+}
+
+resource "aws_instance" "myinstance" {
+  ami           = "ami-0492447090ced6eb5"
+  instance_type = "t2.micro"
+  tags = {
+    Name = "taint-server-example"
+  }
+}
+
+resource "aws_s3_bucket" "mys3bucket" {
+  bucket = "test-bkt-dkkfg-reya"
+}
+```
+
+`terraform apply --auto-approve`
+
+`terraform state list`   This will show you the resources handles by statefile
+
+`terraform taint aws_s3_bucket.mys3bucket`
+
+`terraform apply --auto-approve`    This will now delete only S3 bucket and recreate it not EC2 as S3 bucket has marked as tainted
+
+**TO UNTAINT** `terraform untaint aws_instance.myinstance`
+
+## TERRAFORM LOCALS
+
+In Terraform, locals are used to define and assign values to variables that are meant to be used within a module or a configuration block.
+
+Unlike input variables, which allow values to be passed in from the outside, local values are set within the configuration itself and are used to simplify complex expressions, avoid repetition, and improve the readability of your Terraform code.
+
+```
+locals {
+  project_name   = "sample-project"
+  environment    = "sunil"
+  instance_count = 2
+  tags = {
+    Name        = "${local.project_name}-${local.environment}"
+    Environment = local.environment
+  }
+}
+resource "aws_instance" "myinstance" {
+  ami           = "ami-0492447090ced6eb5"
+  instance_type = "t2.micro"
+  count         = local.instance_count
+  tags          = local.tags
+}
+```
 ## Terraform Workspace
 
 * A workspace is an isolated environment where a separate state file is maintained.
@@ -510,3 +583,158 @@ external = 7543    # external port number
 ```
 
 to run `terraform init` --> `terrafom plan` --> `terraform apply --auto-approve` and to destroy --> `terraform destroy --auto-approve`
+
+## TERRAFORM MODULES
+
+Terraform modules are a fundamental feature that helps in organizing and reusing Terraform configurations.A module is a container for multiple resources that are used together.Modules allow you to encapsulate and manage resources as a single unit, making your Terraform configurations more modular, readable, and maintainable.
+
+There are 2 type of Modules
+
+**Root Module** : The root module is the main configuration where Terraform starts its execution.It is usually defined in the main configuration directory where terraform init and terraform apply are run.The root module can call other modules, referred to as child modules.
+
+**Child Module** : Child modules are modules that are called from within other modules (including the root module).They help in organizing resources and reusing configurations.Each child module can be stored in a separate directory and can be called using a module block in the root module or another parent module.
+
+`**You can refer a sameple module which is present in the files section on top of this page by the name of MODULEPROJECT**`
+
+## Provisioners
+
+Terraform provisioners are used to perform actions on a local or remote machine after a resource is created or updated. They are typically used for tasks such as configuring or installing software on a machine, which Terraform itself does not handle directly.
+
+**local-exec:** Executes a command locally on the machine where Terraform is run. Useful for running scripts or commands that need to be executed locally. The "local-exec" provisioner runs commands on the local machine where Terraform is executed
+
+the below code will launch an instance and print the instance id in .txt file which is stored locally
+```
+provider "aws" {
+region = "us-east-1"
+}
+
+resource "aws_instance" "myinstance" {
+ami = ""
+instance_type = "t2.micro"
+provisioner "local-exec" {
+command = "echo'instance ID: $-{self.id}' > instance.id.txt"
+}
+}
+```
+
+**Remote-Exec:** The remote-exec provisioner runs commands on a remote resource. It typically requires a connection configuration.
+
+
+In the below, i am using remote exec where I would be launching an ec2 instance and connecting via ssh and installing apache server.
+
+tip: Copy the private key content into `~/.ssh/id_rsa.pub`
+```
+provider "aws" {
+  region = "us-east-1"
+}
+
+resource "aws_instance" "myinstance" {
+  ami           = "ami-085386e29e44dacd7"
+  instance_type = "t2.micro"
+  key_name      = "firstkey"
+  tags = {
+    name = "sample-instance"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "sudo yum update -y",
+      "sudo yum install httpd -y",
+      "sudo systemctl start httpd"
+    ]
+
+    connection {
+      type        = "ssh"
+      user        = "ec2-user"
+      private_key = file("~/.ssh/id_rsa.pub")
+      host        = self.public_ip
+    }
+
+  }
+
+}
+```
+
+**File Provisioner:** The file provisioner uploads files from the local machine to the remote resource. Uploads files from the local machine to a remote resource. Useful for transferring configuration files or scripts to a remote machine.
+
+In this code, terraform will take the command form a file and execute it in the machine 
+
+Create a sample .sh file 
+```
+#!/bin/bash
+
+echo "Running remote script"
+
+sudo yum update -y
+sudo yum install -y httpd
+sudo systemctl start httpd
+sudo systemctl enable httpd
+
+echo "<html><h1>Hey, this a sample infra created by Sunil with the help of terraform</h1></html>" | sudo tee /var/www/html/index.html > /dev/null
+```
+
+then `vi.main.tf`
+
+```
+provisioner "file" {
+  source      = "remote_script.sh"
+  destination = "/tmp/remote_script.sh"
+
+  connection {
+    type        = "ssh"
+    user        = "ec2-user"
+    private_key = file("~/.ssh/firstkey.pem")
+    host        = self.public_ip
+  }
+}
+
+provisioner "remote-exec" {
+  inline = [
+    "chmod +x /tmp/remote_script.sh",
+    "/tmp/remote_script.sh"
+  ]
+
+  connection {
+    type        = "ssh"
+    user        = "ec2-user"
+    private_key = file("~/.ssh/firstkey.pem")
+    host        = self.public_ip
+  }
+}
+```
+
+## DATA-Source
+
+In Terraform, a data source allows you to fetch information from existing resources or services that are external to your Terraform configuration. Fetching Information About Existing Resources. If you need to retrieve information about an existing resource that wasn't created by your Terraform configuration (e.g., an existing AWS VPC or EC2 AMI).
+
+For example, if you want to make changes in the alreday created resorces in this case VPC, and want to add a ec2 instance
+```
+provider "aws" {
+  region = "us-east-1"
+}
+
+data "aws_vpc" "default" {
+  default = true
+}
+
+resource "aws_instance" "example" {
+  ami           = "ami-08ee1453725d19cdb"
+  instance_type = "t2.micro"
+  subnet_id     = data.aws_vpc.default.id
+}
+
+
+data "aws_s3_bucket" "sunil_bucket" {
+  bucket = "sample_bucket"
+}
+
+output "bucket_arn" {
+  value = data.aws_s3_bucket.sunil_bucket.arn
+}
+```
+
+## TERRAFORMER
+
+Terraformer is used for importing the existing resources in one shot. 
+
+for eample you can import all the resorces in a already existing vpc with this command `terraformer import aws --resources=instance,vpc,subnet --regions=us-east-1`
