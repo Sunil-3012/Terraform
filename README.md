@@ -16,6 +16,7 @@
 * Terraform Modules
 * Provisioner(local-exec, remote-exec, file)
 * Data-Source
+* Terraformer
 ### Initialize infrastructure 
 
 `terraform init` Initialize a working directory, it will download the providers plugins
